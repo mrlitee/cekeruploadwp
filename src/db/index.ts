@@ -12,21 +12,20 @@ db.pragma('journal_mode = WAL');
 db.exec(`
 CREATE TABLE IF NOT EXISTS transactions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  email_uid     TEXT    NOT NULL,                  -- IMAP UID, kunci anti-duplikat
-  message_id    TEXT,                              -- RFC Message-ID
-  bank          TEXT    NOT NULL,                  -- BCA, MANDIRI, BNI, BRI, BSI, CIMB, PERMATA, JAGO, JENIUS, GOPAY, OVO, DANA, SHOPEEPAY, OTHER
+  notif_id      TEXT    NOT NULL UNIQUE,           -- hash unik dari notif (anti-duplikat)
+  source        TEXT    NOT NULL,                  -- 'android' | 'wa' | 'manual'
+  bank          TEXT    NOT NULL,                  -- BCA, MANDIRI, BNI, BRI, ...
   jenis         TEXT    NOT NULL CHECK (jenis IN ('in','out')),
-  amount        INTEGER NOT NULL,                  -- rupiah, integer
+  amount        INTEGER NOT NULL,                  -- rupiah integer
   currency      TEXT    NOT NULL DEFAULT 'IDR',
   merchant      TEXT,                              -- nama outlet / counterparty
-  category      TEXT,                              -- (opsional, manual via /kategori)
-  channel       TEXT,                              -- QRIS, TRANSFER, DEBIT, CC, EWALLET, etc
-  reference     TEXT,                              -- nomor referensi/trace
-  occurred_at   TEXT    NOT NULL,                  -- ISO8601 (UTC)
-  raw_subject   TEXT,
-  raw_snippet   TEXT,
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(email_uid, bank)
+  category      TEXT,                              -- (opsional)
+  channel       TEXT,                              -- QRIS, TRANSFER, DEBIT, EWALLET, ...
+  reference     TEXT,
+  occurred_at   TEXT    NOT NULL,                  -- ISO8601
+  raw_title     TEXT,
+  raw_text      TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tx_occurred ON transactions(occurred_at);

@@ -1,8 +1,8 @@
 import { db } from './index';
 
 export interface TxInput {
-  email_uid: string;
-  message_id?: string;
+  notif_id: string;
+  source: 'android' | 'wa' | 'manual';
   bank: string;
   jenis: 'in' | 'out';
   amount: number;
@@ -10,9 +10,9 @@ export interface TxInput {
   merchant?: string;
   channel?: string;
   reference?: string;
-  occurred_at: string; // ISO8601
-  raw_subject?: string;
-  raw_snippet?: string;
+  occurred_at: string;
+  raw_title?: string;
+  raw_text?: string;
 }
 
 export interface TxRow extends TxInput {
@@ -25,17 +25,16 @@ export function insertTx(t: TxInput): { inserted: boolean; id?: number } {
   try {
     const stmt = db.prepare(`
       INSERT INTO transactions
-        (email_uid, message_id, bank, jenis, amount, currency, merchant, channel, reference, occurred_at, raw_subject, raw_snippet)
-      VALUES (@email_uid, @message_id, @bank, @jenis, @amount, @currency, @merchant, @channel, @reference, @occurred_at, @raw_subject, @raw_snippet)
+        (notif_id, source, bank, jenis, amount, currency, merchant, channel, reference, occurred_at, raw_title, raw_text)
+      VALUES (@notif_id, @source, @bank, @jenis, @amount, @currency, @merchant, @channel, @reference, @occurred_at, @raw_title, @raw_text)
     `);
     const r = stmt.run({
       currency: 'IDR',
-      message_id: null,
       merchant: null,
       channel: null,
       reference: null,
-      raw_subject: null,
-      raw_snippet: null,
+      raw_title: null,
+      raw_text: null,
       ...t,
     });
     return { inserted: true, id: Number(r.lastInsertRowid) };

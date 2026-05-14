@@ -1,4 +1,4 @@
-import { ParserFn, ParsedTx, RawEmail } from './parsers/types';
+import { ParserFn, ParsedTx, RawNotif } from './parsers/types';
 import { bca } from './parsers/bca';
 import { mandiri } from './parsers/mandiri';
 import { bni } from './parsers/bni';
@@ -12,13 +12,13 @@ import { ewallet } from './parsers/ewallet';
 
 const PARSERS: ParserFn[] = [bca, mandiri, bni, bri, bsi, cimb, permata, jago, jenius, ewallet];
 
-export function dispatch(email: RawEmail): ParsedTx | null {
+export function dispatch(n: RawNotif): ParsedTx | null {
   for (const p of PARSERS) {
     try {
-      const r = p(email);
+      const r = p(n);
       if (r && r.amount > 0) return r;
     } catch {
-      /* swallow & try next */
+      /* continue */
     }
   }
   return null;
