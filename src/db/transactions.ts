@@ -26,7 +26,7 @@ export function insertTx(t: TxInput): { inserted: boolean; id?: number } {
     const stmt = db.prepare(`
       INSERT INTO transactions
         (notif_id, source, bank, jenis, amount, currency, merchant, channel, reference, occurred_at, raw_title, raw_text)
-      VALUES (@notif_id, @source, @bank, @jenis, @amount, @currency, @merchant, @channel, @reference, @occurred_at, @raw_title, @raw_text)
+      VALUES (:notif_id, :source, :bank, :jenis, :amount, :currency, :merchant, :channel, :reference, :occurred_at, :raw_title, :raw_text)
     `);
     const r = stmt.run({
       currency: 'IDR',
@@ -47,13 +47,13 @@ export function insertTx(t: TxInput): { inserted: boolean; id?: number } {
 export function listTx(fromIso: string, toIso: string, jenis?: 'in' | 'out'): TxRow[] {
   const sql = `
     SELECT * FROM transactions
-    WHERE occurred_at >= ? AND occurred_at <= ?
-    ${jenis ? 'AND jenis = ?' : ''}
+    WHERE occurred_at >= :from AND occurred_at <= :to
+    ${jenis ? 'AND jenis = :jenis' : ''}
     ORDER BY occurred_at DESC
   `;
-  const params: any[] = [fromIso, toIso];
-  if (jenis) params.push(jenis);
-  return db.prepare(sql).all(...params) as TxRow[];
+  const params: Record<string, unknown> = { from: fromIso, to: toIso };
+  if (jenis) params.jenis = jenis;
+  return db.prepare(sql).all(params) as TxRow[];
 }
 
 export function summary(fromIso: string, toIso: string) {
@@ -64,9 +64,9 @@ export function summary(fromIso: string, toIso: string) {
         COALESCE(SUM(CASE WHEN jenis='out' THEN amount END),0) AS total_out,
         COUNT(*) AS n
        FROM transactions
-       WHERE occurred_at >= ? AND occurred_at <= ?`,
+       WHERE occurred_at >= :from AND occurred_at <= :to`,
     )
-    .get(fromIso, toIso) as { total_in: number; total_out: number; n: number };
+    .get({ from: fromIso, to: toIso }) as { total_in: number; total_out: number; n: number };
   return r;
 }
 
@@ -77,10 +77,10 @@ export function topMerchants(fromIso: string, toIso: string, limit = 10) {
               SUM(amount) AS total,
               COUNT(*)   AS n
        FROM transactions
-       WHERE jenis='out' AND occurred_at >= ? AND occurred_at <= ?
+       WHERE jenis='out' AND occurred_at >= :from AND occurred_at <= :to
        GROUP BY merchant
        ORDER BY total DESC
-       LIMIT ?`,
+       LIMIT :lim`,
     )
-    .all(fromIso, toIso, limit) as { merchant: string; total: number; n: number }[];
+    .all({ from: fromIso, to: toIso, lim: limit }) as { merchant: string; total: number; n: number }[];
 }
