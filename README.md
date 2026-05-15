@@ -1,181 +1,167 @@
 # WA Finance Bot 💰
 
-WhatsApp bot pencatat keuangan pribadi yang **otomatis mendeteksi transaksi** dari notifikasi bank — **tanpa login email, tanpa MacroDroid, tanpa app tambahan**.
+Bot WhatsApp pencatat keuangan otomatis. **Sumber utama: notifikasi EMAIL dari bank.**
+
+User cukup chat ke nomor bot. Tidak install apa pun di HP.
 
 ## Cara kerja
 
 ```
-[HP Android]
- ├─ Notif app bank ──▶ Termux:API ──▶ android-listener.ts ─┐
- │                                                          ▼
- └─ Chat WA dari bank ─▶ Baileys self-listen ──────────▶ Ingest ─▶ SQLite
-                                                              │
-                                                              ▼
-                                                     Kirim notif ke owner WA
+                                 ┌────────────────────┐
+  Email notif transaksi    ─────▶│   IMAP poller      │──┐
+  (Gmail/Outlook/Yahoo)          │   (cek tiap 60s)   │  │
+                                 └────────────────────┘  │
+                                                         ▼
+  Pesan WA dari bank (opsional) ─────▶ Baileys ─────▶ Ingest ──▶ SQLite
+                                                         │
+                                                         ▼
+                                              Notif balik ke owner WA
 ```
 
-Bot **otomatis menangkap notifikasi dari 2 jalur**:
-1. **Notifikasi Android** — langsung dibaca dari system notif HP via `termux-notification-list`.
-2. **Pesan WhatsApp** — bot membaca chat masuk yang mengandung pola transaksi bank.
+Bot baca **email notif transaksi** dari mailbox kamu (Gmail, Outlook, Yahoo, Zoho) lewat IMAP, parse otomatis (BCA, Mandiri, BNI, BRI, BSI, CIMB, Permata, Jago, Jenius, GoPay, OVO, DANA, ShopeePay, LinkAja), simpan ke DB, dan kirim notif ke WhatsApp kamu.
 
-User cukup **jalankan bot + scan QR WhatsApp**. Selesai.
+## Mode penggunaan
 
-## Fitur
+| Mode | Cocok untuk | User akhir install? |
+|---|---|---|
+| **A. Cloud (Railway/Render)** | Banyak user, 24/7 | ❌ tidak install apa-apa |
+| **B. Termux (HP)** | Pribadi sendiri | hanya operator |
+| **C. PC/laptop** | Yang punya laptop nyala | hanya operator |
 
-- ✅ Auto-detect tanpa app tambahan (cukup Termux + Termux:API)
-- ✅ Multi-bank: **BCA, Mandiri, BNI, BRI, BSI, CIMB, Permata, Jago, Jenius**
-- ✅ E-wallet: **GoPay, OVO, DANA, ShopeePay, LinkAja**
-- ✅ Pencatatan manual: `/catat out 25000 Kopi Kenangan`
-- ✅ Filter tanggal fleksibel
-- ✅ Top outlet pengeluaran
-- ✅ Anti-duplikat otomatis
+---
 
-## Install (Termux, 5 menit)
+## A. Setup CLOUD (paling simpel untuk user akhir)
 
-### 1. Install Termux & Termux:API
+### 1. Persiapan email
 
-Download dari **F-Droid** (JANGAN dari Play Store):
-- [Termux](https://f-droid.org/en/packages/com.termux/)
-- [Termux:API](https://f-droid.org/en/packages/com.termux.api/)
+Pakai 1 alamat email yang sudah/akan menerima notif transaksi dari bank.
 
-Buka Termux, jalankan:
+**Untuk Gmail:**
+1. Aktifkan [2-Step Verification](https://myaccount.google.com/security)
+2. Buat [App Password](https://myaccount.google.com/apppasswords) → simpan 16 karakternya
+3. Pastikan [IMAP Access](https://mail.google.com/mail/u/0/#settings/fwdandpop) ON di Gmail Settings
+
+**Untuk Outlook/Yahoo/Zoho:** App Password juga (cara serupa).
+
+### 2. Deploy ke Railway
+
+1. <https://railway.app> → **New Project** → **Deploy from GitHub** → pilih repo ini
+2. Branch: `feat/wa-finance-bot`
+3. Tab **Variables**, tambah:
+   ```
+   WA_OWNERS = 6281234567890
+   EMAIL_ENABLED = true
+   IMAP_HOST = imap.gmail.com
+   IMAP_USER = email-anda@gmail.com
+   IMAP_PASS = app-password-16-karakter
+   TZ = Asia/Jakarta
+   ```
+4. Tab **Settings → Volumes**, tambah:
+   - `/app/auth` (session WhatsApp)
+   - `/app/data` (database)
+5. **Deploy** → buka **Deploy Logs**
+
+### 3. Scan QR WhatsApp (sekali)
+
+Di logs akan muncul QR code → scan dari WA bot di **Linked Devices → Link a Device**.
+
+Setelah connected, session disimpan di volume cloud. Tidak perlu scan lagi.
+
+### 4. Selesai
+
+User akhir tinggal:
+- Save nomor WA bot
+- Setiap transaksi dari bank yang kirim email → otomatis tercatat dalam <60 detik
+- Chat `/saldo`, `/laporan`, dll untuk lihat data
+
+---
+
+## B. Setup TERMUX (di HP sendiri)
+
 ```bash
-pkg update -y && pkg upgrade -y
-pkg install -y git nodejs-lts termux-api
-```
-
-### 2. Beri izin
-
-```bash
-termux-setup-storage
-termux-notification-list    # pertama kali akan minta izin Notification Access
-```
-
-Kalau muncul popup Android → **Allow Notification Access** untuk Termux:API.
-
-> **PENTING**: Pastikan **Notification Access** ON untuk Termux:API di:
-> Settings → Apps → Special access → Notification access → Termux:API ✅
-
-### 3. Clone & install
-
-```bash
-cd ~
+pkg update -y && pkg install -y git nodejs-lts
 git clone https://github.com/mrlitee/cekeruploadwp.git
-cd cekeruploadwp
-git checkout feat/wa-finance-bot
+cd cekeruploadwp && git checkout feat/wa-finance-bot
 npm install
-```
-
-### 4. Konfigurasi
-
-```bash
 cp .env.example .env
-nano .env
-```
-
-Yang **WAJIB diisi** cuma 1:
-```env
-WA_OWNERS=628xxxxxxxxxx    # nomor WA kamu
-```
-
-Save: `Ctrl+O` → Enter → `Ctrl+X`
-
-### 5. Jalankan
-
-```bash
+nano .env   # isi WA_OWNERS, IMAP_USER, IMAP_PASS
 termux-wake-lock
 npm run dev
 ```
 
-Muncul **QR code** → buka WhatsApp → **Linked Devices** → scan QR.
+Scan QR → selesai.
 
-Setelah sukses:
-```
-WhatsApp connected ✅
-Bot aktif. Sumber notif:
-  ✅ WhatsApp self-listen (otomatis)
-  ✅ Android notification listener (termux-api)
+---
+
+## C. Setup PC/Laptop
+
+```bash
+git clone https://github.com/mrlitee/cekeruploadwp.git
+cd cekeruploadwp && git checkout feat/wa-finance-bot
+npm install
+cp .env.example .env
+# edit .env
+npm run dev
 ```
 
-**SELESAI!** Bot sekarang otomatis tangkap setiap transaksi.
+---
 
-### 6. Tes
+## Bank/E-wallet yang didukung
 
-Lakukan transaksi kecil (QRIS Rp 1.000, transfer kecil, dll). Dalam 5 detik, bot kirim notif ke WA kamu:
-```
-🔴 Pengeluaran — BCA
-Rp 25.000
-📍 STARBUCKS RESERVE
-🔗 QRIS
-```
+Selama mereka kirim email konfirmasi/notifikasi transaksi:
+
+**Bank:** BCA · Mandiri · BNI · BRI · BSI · CIMB Niaga (OCTO) · Permata · Bank Jago · Jenius (BTPN)
+
+**E-wallet:** GoPay · OVO · DANA · ShopeePay · LinkAja
+
+> Kalau bank kamu tidak kirim email transaksi, daftar dulu lewat app bank-nya. Hampir semua bank Indonesia kirim email konfirmasi setiap transaksi.
+
+---
 
 ## Perintah WhatsApp
 
-Kirim ke nomor bot dari HP kamu:
+Kirim dari nomor `WA_OWNERS` ke nomor bot:
 
-| Perintah | Fungsi |
+| Perintah | Contoh |
 |---|---|
-| `/menu` | tampilkan bantuan |
-| `/saldo bulan ini` | ringkasan pemasukan/pengeluaran |
-| `/laporan bulan lalu` | daftar semua transaksi |
-| `/pengeluaran 1-30 bulan lalu` | hanya pengeluaran |
-| `/pemasukan minggu ini` | hanya pemasukan |
+| `/menu` | bantuan |
+| `/saldo bulan ini` | ringkasan in/out/selisih |
+| `/laporan bulan lalu` | semua transaksi |
+| `/pengeluaran 1-30 bulan lalu` | filter |
+| `/pemasukan minggu ini` | filter pemasukan |
 | `/top bulan ini 5` | top 5 outlet pengeluaran |
 | `/catat out 25000 Kopi Kenangan` | catat manual |
 
-### Range yang didukung:
-- `hari ini`, `kemarin`, `minggu ini`, `bulan ini`, `bulan lalu`
+### Filter range
+- `hari ini`, `kemarin`, `minggu ini`
+- `bulan ini`, `bulan lalu`
 - `1-30 bulan lalu`, `5-15 bulan ini`
 - `2026-01-01:2026-01-31`
 - `01/05/2026:10/05/2026`
 
-## Tips Termux
+---
 
-**Supaya bot tidak mati saat HP di-lock:**
+## Kalibrasi parser email
+
+Format email tiap bank kadang berubah. Bot menyimpan `raw_title` (subject) dan `raw_text` (snippet body) di DB. Cek:
+
 ```bash
-termux-wake-lock
+sqlite3 data/finance.db "SELECT bank,amount,merchant,raw_title FROM transactions ORDER BY id DESC LIMIT 10"
 ```
-Plus matikan battery optimization: Settings → Apps → Termux → Battery → **Unrestricted**.
 
-**Auto-start saat Termux dibuka:**
-1. Install [Termux:Boot](https://f-droid.org/en/packages/com.termux.boot/) dari F-Droid
-2. ```bash
-   mkdir -p ~/.termux/boot
-   echo '#!/data/data/com.termux/files/usr/bin/bash
-   termux-wake-lock
-   cd ~/cekeruploadwp && npm run dev' > ~/.termux/boot/start-bot.sh
-   chmod +x ~/.termux/boot/start-bot.sh
-   ```
+Kalau ada email yang tidak terbaca, kirim contoh subject+body-nya — bisa di-tweak regex parser di `src/notif/parsers/<bank>.ts`.
+
+---
 
 ## Troubleshooting
 
-| Masalah | Solusi |
+| Error | Solusi |
 |---|---|
-| `EADDRINUSE port 3000` | `pkill -f node` lalu `npm run dev` ulang, atau set `WEBHOOK_ENABLED=false` |
-| `termux-notification-list` tidak jalan | Beri Notification Access: Settings → Notification access → Termux:API |
-| QR tidak muncul / terpotong | Kecilkan font: pinch-to-zoom atau `Ctrl + -` |
-| Bot disconnect | Hapus `auth/` folder, scan QR ulang. Pastikan `termux-wake-lock` aktif |
-| `npm install` error native | Pastikan pakai branch terbaru (`git pull`) — sudah tidak pakai native |
-| Notif tidak terdeteksi | Cek `raw_text` di DB: `sqlite3 data/finance.db "SELECT * FROM transactions LIMIT 5"` |
-
-## Bank yang didukung
-
-| Bank/E-wallet | Package name app |
-|---|---|
-| BCA / myBCA / blu | com.bca.* / id.co.bca.blu |
-| Mandiri / Livin' | id.co.mandiri.* |
-| BRI / BRImo | id.co.bri.brimo |
-| BNI Mobile | com.bni.mobilebanking |
-| BSI / BYOND | id.co.bankbsi.* |
-| CIMB / OCTO | com.ocaborneo.* |
-| Permata | com.permata.* |
-| Bank Jago | id.co.bankjago.* |
-| Jenius | id.co.btpn.dc |
-| GoPay | com.gojek.app |
-| OVO | com.ovo.id |
-| DANA | id.dana |
-| ShopeePay | com.shopee.id |
-| LinkAja | com.telkom.mylinaja |
+| IMAP `Invalid credentials` | Pakai App Password, bukan password biasa. Aktifkan 2FA dulu. |
+| IMAP `disabled by admin` | Aktifkan IMAP di Gmail Settings. |
+| `EADDRINUSE port 3000` | `pkill -f node` atau set `WEBHOOK_ENABLED=false` |
+| Bot disconnect WA | Pastikan `termux-wake-lock` (Termux), atau volume `/app/auth` ada (cloud). |
+| QR tidak muncul / terpotong | Kecilkan font terminal. |
 
 ## Lisensi
 MIT

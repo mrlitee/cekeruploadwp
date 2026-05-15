@@ -1,6 +1,7 @@
 import { ParserFn, pickAmount, clean, detectJenis } from './types';
 
 // Dipakai untuk:
+// - Email notifikasi BCA (e-Statement, BCA Transactions, dll)
 // - Notif Android dari app BCA mobile / myBCA / blu by BCA
 // - Pesan WA dari "BCA" (nomor resmi BCA WhatsApp)
 //
@@ -10,7 +11,7 @@ import { ParserFn, pickAmount, clean, detectJenis } from './types';
 // "Penarikan tunai ATM Rp 500.000"
 // "Setoran tunai Rp 1.000.000"
 // "Pembayaran TOKOPEDIA Rp 199.000"
-const ID_HINTS = /(BCA|myBCA|blu|HaloBCA)/i;
+const ID_HINTS = /(BCA|myBCA|blu|HaloBCA|bca\.co\.id)/i;
 const APP_HINTS = /(bca|blu)/i;
 
 export const bca: ParserFn = (n) => {

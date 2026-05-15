@@ -11,13 +11,13 @@ export interface ParsedTx {
 export interface RawNotif {
   /** unique id (sumber+timestamp+hash) untuk anti-duplikat */
   id: string;
-  /** sumber notif: 'android', 'wa', 'manual' */
-  source: 'android' | 'wa' | 'manual';
-  /** package name app sumber, mis: com.bca.mybca.omni.android, com.brimobile, dll. */
+  /** sumber notif: 'android', 'wa', 'email', 'manual' */
+  source: 'android' | 'wa' | 'email' | 'manual';
+  /** package name app sumber, atau alamat email pengirim */
   app?: string;
-  /** title notif Android atau nama pengirim WA */
+  /** title notif Android, nama pengirim WA, atau subject email */
   title?: string;
-  /** isi pesan */
+  /** isi pesan (plain-text) */
   text: string;
   /** epoch ms saat notif diterima */
   receivedAt: number;
