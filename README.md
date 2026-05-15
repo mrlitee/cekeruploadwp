@@ -1,142 +1,181 @@
-# WA Finance Bot 💰 (no-email edition)
+# WA Finance Bot 💰
 
-WhatsApp bot pencatat keuangan pribadi yang **otomatis mendeteksi pemasukan & pengeluaran** dari notifikasi bank — **tanpa login email Gmail**.
+WhatsApp bot pencatat keuangan pribadi yang **otomatis mendeteksi transaksi** dari notifikasi bank — **tanpa login email, tanpa MacroDroid, tanpa app tambahan**.
 
 ## Cara kerja
 
-Ada **2 sumber data** yang aktif bersamaan:
-
-1. **Notifikasi Android dari aplikasi mobile banking**
-   App seperti BCA mobile / myBCA / blu, Livin' by Mandiri, BRImo, BNI Mobile, BSI Mobile, OCTO Mobile (CIMB), PermataMobile, Jago, Jenius, GoPay, OVO, DANA, ShopeePay — semuanya kirim notifikasi tiap transaksi.
-   Notif ini di-forward dari HP ke server bot lewat HTTP webhook menggunakan **MacroDroid** atau **Tasker** (gratis di Play Store).
-
-2. **WhatsApp self-listen**
-   Banyak bank (BCA, BRI, Mandiri Livin', dll) juga kirim notifikasi transaksi via WhatsApp resmi mereka. Bot akan otomatis membaca pesan dari nomor-nomor tersebut.
-
 ```
 [HP Android]
- ├─ Notif app bank ──▶ MacroDroid/Tasker ──HTTP POST──▶ /notif (Fastify)
- │                                                          │
- └─ Pesan WA bank ───▶ Baileys self-listen ────────────────▶ Ingest ─▶ SQLite
-                                                                 │
-                                                                 ▼
-                                                       Notif balik ke owner
+ ├─ Notif app bank ──▶ Termux:API ──▶ android-listener.ts ─┐
+ │                                                          ▼
+ └─ Chat WA dari bank ─▶ Baileys self-listen ──────────▶ Ingest ─▶ SQLite
+                                                              │
+                                                              ▼
+                                                     Kirim notif ke owner WA
 ```
+
+Bot **otomatis menangkap notifikasi dari 2 jalur**:
+1. **Notifikasi Android** — langsung dibaca dari system notif HP via `termux-notification-list`.
+2. **Pesan WhatsApp** — bot membaca chat masuk yang mengandung pola transaksi bank.
+
+User cukup **jalankan bot + scan QR WhatsApp**. Selesai.
 
 ## Fitur
 
-- Auto-deteksi in/out via notif Android & WA (anti-duplikat)
-- Multi-bank Indonesia: **BCA, Mandiri, BNI, BRI, BSI, CIMB Niaga, Permata, Jago, Jenius**
-- E-wallet: **GoPay, OVO, DANA, ShopeePay, LinkAja**
-- Pencatatan manual: `/catat out 25000 Starbucks Sudirman`
-- Filter tanggal fleksibel
-- Top outlet pengeluaran
+- ✅ Auto-detect tanpa app tambahan (cukup Termux + Termux:API)
+- ✅ Multi-bank: **BCA, Mandiri, BNI, BRI, BSI, CIMB, Permata, Jago, Jenius**
+- ✅ E-wallet: **GoPay, OVO, DANA, ShopeePay, LinkAja**
+- ✅ Pencatatan manual: `/catat out 25000 Kopi Kenangan`
+- ✅ Filter tanggal fleksibel
+- ✅ Top outlet pengeluaran
+- ✅ Anti-duplikat otomatis
 
-## Setup server bot
+## Install (Termux, 5 menit)
+
+### 1. Install Termux & Termux:API
+
+Download dari **F-Droid** (JANGAN dari Play Store):
+- [Termux](https://f-droid.org/en/packages/com.termux/)
+- [Termux:API](https://f-droid.org/en/packages/com.termux.api/)
+
+Buka Termux, jalankan:
+```bash
+pkg update -y && pkg upgrade -y
+pkg install -y git nodejs-lts termux-api
+```
+
+### 2. Beri izin
 
 ```bash
+termux-setup-storage
+termux-notification-list    # pertama kali akan minta izin Notification Access
+```
+
+Kalau muncul popup Android → **Allow Notification Access** untuk Termux:API.
+
+> **PENTING**: Pastikan **Notification Access** ON untuk Termux:API di:
+> Settings → Apps → Special access → Notification access → Termux:API ✅
+
+### 3. Clone & install
+
+```bash
+cd ~
+git clone https://github.com/mrlitee/cekeruploadwp.git
+cd cekeruploadwp
+git checkout feat/wa-finance-bot
 npm install
+```
+
+### 4. Konfigurasi
+
+```bash
 cp .env.example .env
-# edit .env: WA_OWNERS=628xxxx, WEBHOOK_TOKEN=token-acak
+nano .env
+```
+
+Yang **WAJIB diisi** cuma 1:
+```env
+WA_OWNERS=628xxxxxxxxxx    # nomor WA kamu
+```
+
+Save: `Ctrl+O` → Enter → `Ctrl+X`
+
+### 5. Jalankan
+
+```bash
+termux-wake-lock
 npm run dev
 ```
 
-Pertama kali jalan akan menampilkan QR di terminal — buka WhatsApp → **Linked Devices** → scan.
+Muncul **QR code** → buka WhatsApp → **Linked Devices** → scan QR.
 
-Server webhook listen di port **3000** (atur di `WEBHOOK_PORT`).
-
-## Setup HP Android (MacroDroid)
-
-1. Install **MacroDroid** dari Play Store.
-2. Beri izin **Notification Access** ke MacroDroid.
-3. Buat macro baru:
-   - **Trigger**: *Notification → Notification Received*
-     - Aplikasi: pilih app bank yang kamu pakai (BCA, Livin', BRImo, dst). Bisa pilih banyak app sekaligus dengan beberapa macro atau pakai satu macro per app.
-   - **Action**: *Connectivity → HTTP Request*
-     - Method: `POST`
-     - URL: `https://your-server.example.com/notif` (atau IP lokal kalau server di dalam jaringan rumah, mis. `http://192.168.1.10:3000/notif`)
-     - Headers:
-       ```
-       Content-Type: application/json
-       Authorization: Bearer ISI_DENGAN_WEBHOOK_TOKEN
-       ```
-     - Body (JSON):
-       ```json
-       {
-         "source": "android",
-         "app": "[notification_package]",
-         "title": "[notification_title]",
-         "text": "[notification_text]",
-         "receivedAt": [system_time_millis]
-       }
-       ```
-       *Tag dalam kurung siku adalah magic-text MacroDroid yang otomatis diisi.*
-
-> **Tasker** punya cara serupa: AutoNotification (atau Notification event) → HTTP Request action.
-
-> Aplikasi alternatif: *"Notification Forwarder"* atau *"AutoNotification + Tasker"*. Apapun yang bisa POST JSON ke webhook sudah cukup.
-
-## Setup WhatsApp self-listen (opsional)
-
-Kalau bankmu juga kirim notifikasi via WhatsApp resmi (mis. HaloBCA, BRI Info, Livin'), tambahkan nomor WA mereka ke `WA_BANK_SOURCES`:
-
-```env
-WA_BANK_SOURCES=6281804500888,6281190001946
+Setelah sukses:
+```
+WhatsApp connected ✅
+Bot aktif. Sumber notif:
+  ✅ WhatsApp self-listen (otomatis)
+  ✅ Android notification listener (termux-api)
 ```
 
-Format: nomor internasional tanpa `+`, dipisah koma. Pesan dari nomor-nomor itu akan diparse otomatis sebagai sumber transaksi.
+**SELESAI!** Bot sekarang otomatis tangkap setiap transaksi.
 
-> Nomor di atas hanya contoh — cek nomor resmi WA bankmu langsung dari app/web resmi bank.
+### 6. Tes
 
-## Perintah WhatsApp (kirim dari nomor `WA_OWNERS`)
+Lakukan transaksi kecil (QRIS Rp 1.000, transfer kecil, dll). Dalam 5 detik, bot kirim notif ke WA kamu:
+```
+🔴 Pengeluaran — BCA
+Rp 25.000
+📍 STARBUCKS RESERVE
+🔗 QRIS
+```
 
-| Perintah | Contoh |
+## Perintah WhatsApp
+
+Kirim ke nomor bot dari HP kamu:
+
+| Perintah | Fungsi |
 |---|---|
 | `/menu` | tampilkan bantuan |
-| `/saldo [range]` | ringkasan in/out/selisih |
-| `/laporan [range]` | semua transaksi |
-| `/pengeluaran [range]` | hanya pengeluaran |
-| `/pemasukan [range]` | hanya pemasukan |
-| `/top [range] [N]` | top outlet pengeluaran |
-| `/catat <in\|out> <jumlah> <nama>` | catat manual |
+| `/saldo bulan ini` | ringkasan pemasukan/pengeluaran |
+| `/laporan bulan lalu` | daftar semua transaksi |
+| `/pengeluaran 1-30 bulan lalu` | hanya pengeluaran |
+| `/pemasukan minggu ini` | hanya pemasukan |
+| `/top bulan ini 5` | top 5 outlet pengeluaran |
+| `/catat out 25000 Kopi Kenangan` | catat manual |
 
-Range yang didukung:
+### Range yang didukung:
 - `hari ini`, `kemarin`, `minggu ini`, `bulan ini`, `bulan lalu`
 - `1-30 bulan lalu`, `5-15 bulan ini`
 - `2026-01-01:2026-01-31`
 - `01/05/2026:10/05/2026`
 
-Contoh:
-```
-/saldo bulan lalu
-/pengeluaran 1-30 bulan lalu
-/top bulan ini 5
-/laporan 2026-04-01:2026-04-15
-```
+## Tips Termux
 
-## Cek webhook
-
+**Supaya bot tidak mati saat HP di-lock:**
 ```bash
-curl -s http://localhost:3000/health
-# {"ok":true}
-
-curl -s -X POST http://localhost:3000/notif \
-  -H 'Authorization: Bearer ISI_TOKENMU' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "source":"android",
-    "app":"com.bca.mybca.omni.android",
-    "title":"BCA",
-    "text":"QRIS di STARBUCKS RESERVE Rp 75.000 berhasil"
-  }'
-# {"matched":true,"inserted":true,"tx":{...}}
+termux-wake-lock
 ```
+Plus matikan battery optimization: Settings → Apps → Termux → Battery → **Unrestricted**.
 
-## Catatan kalibrasi parser
+**Auto-start saat Termux dibuka:**
+1. Install [Termux:Boot](https://f-droid.org/en/packages/com.termux.boot/) dari F-Droid
+2. ```bash
+   mkdir -p ~/.termux/boot
+   echo '#!/data/data/com.termux/files/usr/bin/bash
+   termux-wake-lock
+   cd ~/cekeruploadwp && npm run dev' > ~/.termux/boot/start-bot.sh
+   chmod +x ~/.termux/boot/start-bot.sh
+   ```
 
-Setiap bank punya format teks notif yang unik dan kadang berubah. Baseline regex sudah cocok untuk format umum bahasa Indonesia. Kolom `raw_title` dan `raw_text` disimpan di DB sehingga bisa dipakai untuk debugging dan menyesuaikan regex per-bank di `src/notif/parsers/<bank>.ts`.
+## Troubleshooting
 
-Kalau ada notif yang tidak ke-detect (response webhook `{"matched":false}`), kirim contoh teksnya — saya bisa tweak regex bank yang bersangkutan.
+| Masalah | Solusi |
+|---|---|
+| `EADDRINUSE port 3000` | `pkill -f node` lalu `npm run dev` ulang, atau set `WEBHOOK_ENABLED=false` |
+| `termux-notification-list` tidak jalan | Beri Notification Access: Settings → Notification access → Termux:API |
+| QR tidak muncul / terpotong | Kecilkan font: pinch-to-zoom atau `Ctrl + -` |
+| Bot disconnect | Hapus `auth/` folder, scan QR ulang. Pastikan `termux-wake-lock` aktif |
+| `npm install` error native | Pastikan pakai branch terbaru (`git pull`) — sudah tidak pakai native |
+| Notif tidak terdeteksi | Cek `raw_text` di DB: `sqlite3 data/finance.db "SELECT * FROM transactions LIMIT 5"` |
+
+## Bank yang didukung
+
+| Bank/E-wallet | Package name app |
+|---|---|
+| BCA / myBCA / blu | com.bca.* / id.co.bca.blu |
+| Mandiri / Livin' | id.co.mandiri.* |
+| BRI / BRImo | id.co.bri.brimo |
+| BNI Mobile | com.bni.mobilebanking |
+| BSI / BYOND | id.co.bankbsi.* |
+| CIMB / OCTO | com.ocaborneo.* |
+| Permata | com.permata.* |
+| Bank Jago | id.co.bankjago.* |
+| Jenius | id.co.btpn.dc |
+| GoPay | com.gojek.app |
+| OVO | com.ovo.id |
+| DANA | id.dana |
+| ShopeePay | com.shopee.id |
+| LinkAja | com.telkom.mylinaja |
 
 ## Lisensi
 MIT

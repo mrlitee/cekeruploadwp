@@ -51,46 +51,59 @@ export class WhatsAppBot {
     });
   }
 
-  /** Klasifikasikan pesan: dari owner -> command, dari nomor bank -> ingest. */
   private async routeMessage(m: WAMessage) {
     if (!m.message || m.key.fromMe) return;
     const jid = m.key.remoteJid || '';
-    if (!jid.endsWith('@s.whatsapp.net')) return; // skip group/broadcast/status
+    if (!jid.endsWith('@s.whatsapp.net')) return;
 
     const senderNum = jid.split('@')[0].split(':')[0];
     const text = extractText(m);
     if (!text) return;
 
-    // 1) Pesan dari nomor bank yang di-whitelist -> ingest sebagai notif
+    // 1) Pesan dari nomor bank yang di-whitelist -> ingest
     if (config.wa.bankSources.includes(senderNum)) {
-      const id = crypto
-        .createHash('sha1')
-        .update(`wa|${senderNum}|${m.key.id}|${text}`)
-        .digest('hex');
-      const notif: RawNotif = {
-        id,
-        source: 'wa',
-        app: senderNum,
-        title: `WA ${senderNum}`,
-        text,
-        receivedAt: (Number(m.messageTimestamp) || Date.now() / 1000) * 1000,
-      };
-      const r = this.ingest.ingest(notif);
-      if (r.tx) await this.notifyOwners(r.tx);
+      this.ingestWaMessage(senderNum, m, text);
       return;
     }
 
-    // 2) Pesan dari owner -> jalankan command
+    // 2) Pesan dari owner -> jalankan command ATAU ingest jika bukan command
     if (config.wa.owners.includes(senderNum)) {
-      await handleCommand({
-        from: jid,
-        text,
-        reply: async (msg) => { await this.sock!.sendMessage(jid, { text: msg }); },
-      });
+      if (text.startsWith('/')) {
+        await handleCommand({
+          from: jid,
+          text,
+          reply: async (msg) => { await this.sock!.sendMessage(jid, { text: msg }); },
+        });
+        return;
+      }
+    }
+
+    // 3) Auto-detect: coba parse pesan dari siapa pun yang mengandung pola bank
+    if (config.wa.autoDetectAll) {
+      this.ingestWaMessage(senderNum, m, text);
     }
   }
 
-  /** Push notifikasi parsing ke semua owner. */
+  private ingestWaMessage(senderNum: string, m: WAMessage, text: string) {
+    const id = crypto
+      .createHash('sha1')
+      .update(`wa|${senderNum}|${m.key.id}|${text}`)
+      .digest('hex');
+    const notif: RawNotif = {
+      id,
+      source: 'wa',
+      app: senderNum,
+      title: `WA ${senderNum}`,
+      text,
+      receivedAt: (Number(m.messageTimestamp) || Date.now() / 1000) * 1000,
+    };
+    const r = this.ingest.ingest(notif);
+    if (r.inserted && r.tx) {
+      this.notifyOwners(r.tx).catch(() => {});
+    }
+  }
+
+  /** Push notifikasi ke semua owner saat ada transaksi baru terdeteksi. */
   async notifyOwners(tx: ParsedTx) {
     if (!this.sock) return;
     const tag = tx.jenis === 'in' ? '🟢 *Pemasukan*' : '🔴 *Pengeluaran*';
