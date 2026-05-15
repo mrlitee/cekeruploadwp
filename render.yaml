@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: wa-finance-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: WA_OWNERS
+        sync: false
+      - key: WA_AUTO_DETECT
+        value: "true"
+      - key: NOTIF_LISTENER
+        value: "false"
+      - key: WEBHOOK_ENABLED
+        value: "false"
+      - key: TZ
+        value: "Asia/Jakarta"
+    disk:
+      name: data
+      mountPath: /app/data
+      sizeGB: 1
